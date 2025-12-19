@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ProcessingResult, Tone } from '../types';
+import { getLinkedInAuthUrl, postToLinkedIn } from '../services/linkedinService';
 
 interface PostResultProps {
   result: ProcessingResult;
@@ -8,11 +9,18 @@ interface PostResultProps {
   onRegenerate: (tone: Tone) => void;
   isRegenerating: boolean;
   articleUrl: string;
+  linkedInToken?: string | null;
+  linkedInUrn?: string | null;
 }
 
-export const PostResult: React.FC<PostResultProps> = ({ result, onArchive, onRegenerate, isRegenerating, articleUrl }) => {
+export const PostResult: React.FC<PostResultProps> = ({ 
+  result, onArchive, onRegenerate, isRegenerating, articleUrl, 
+  linkedInToken, linkedInUrn 
+}) => {
   const [activeTab, setActiveTab] = useState<'linkedin' | 'twitter'>('linkedin');
   const [copied, setCopied] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
   const [selectedTone, setSelectedTone] = useState<Tone>(result.meta.appliedTone || 'AI Choice');
 
   const tones: Tone[] = ['Authoritative', 'Provocative', 'Controversial', 'AI Choice'];
@@ -45,7 +53,7 @@ export const PostResult: React.FC<PostResultProps> = ({ result, onArchive, onReg
     );
   }
 
-  const { posts, meta } = result;
+  const { posts } = result;
   if (!posts) return null;
 
   const getFullText = (platform: 'linkedin' | 'twitter') => {
@@ -62,12 +70,35 @@ export const PostResult: React.FC<PostResultProps> = ({ result, onArchive, onReg
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareOnSocial = (platform: 'linkedin' | 'twitter') => {
+  const handleNativeLinkedInShare = async () => {
+    if (!linkedInToken || !linkedInUrn) {
+      window.location.href = getLinkedInAuthUrl();
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      const text = getFullText('linkedin');
+      const response = await postToLinkedIn(linkedInToken, linkedInUrn, text);
+      if (response.success) {
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 3000);
+      }
+    } catch (err) {
+      alert('Native sharing failed. Using legacy share intent.');
+      shareLegacy('linkedin');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const shareLegacy = (platform: 'linkedin' | 'twitter') => {
     const text = getFullText(platform);
     let url = '';
     
     if (platform === 'linkedin') {
-      url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}&summary=${encodeURIComponent(text)}`;
+      // Legacy share only takes URL, does not pre-fill body
+      url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`;
     } else {
       url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     }
@@ -148,21 +179,33 @@ export const PostResult: React.FC<PostResultProps> = ({ result, onArchive, onReg
           </button>
         </div>
 
-        <div className="mb-4 flex space-x-2">
-          <button 
-            onClick={() => shareOnSocial('linkedin')}
-            className="flex-1 flex items-center justify-center space-x-2 bg-[#0077b5] text-white py-2 rounded-lg font-bold text-xs hover:bg-[#00669c] transition-all shadow-sm"
-          >
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.3 3.3 0 0 0-3.3-3.3c-.9 0-1.9.4-2.4 1.2v-1.1H10v8.5h2.8v-4.5c0-1.2.2-2.4 1.7-2.4 1.5 0 1.5 1.4 1.5 2.5v4.4H18.8M6.7 8.5h2.8V19H6.7V8.5m1.4-1.2c-.9 0-1.6-.7-1.6-1.6 0-.9.7-1.6 1.6-1.6.9 0 1.6.7 1.6 1.6 0 .9-.7 1.6-1.6 1.6z" /></svg>
-            <span>Share Draft on LinkedIn</span>
-          </button>
-          <button 
-            onClick={() => shareOnSocial('twitter')}
-            className="flex-1 flex items-center justify-center space-x-2 bg-black text-white py-2 rounded-lg font-bold text-xs hover:bg-slate-900 transition-all shadow-sm"
-          >
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-            <span>Share Draft on Twitter</span>
-          </button>
+        <div className="mb-4 flex flex-col space-y-2">
+          {activeTab === 'linkedin' ? (
+            <button 
+              onClick={handleNativeLinkedInShare}
+              disabled={isSharing}
+              className={`w-full flex items-center justify-center space-x-2 py-3 rounded-xl font-black text-xs transition-all shadow-md ${shareSuccess ? 'bg-green-600 text-white' : 'bg-[#0077b5] text-white hover:bg-[#00669c] active:scale-95'}`}
+            >
+              {isSharing ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : shareSuccess ? (
+                <span>Published Successfully!</span>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.3 3.3 0 0 0-3.3-3.3c-.9 0-1.9.4-2.4 1.2v-1.1H10v8.5h2.8v-4.5c0-1.2.2-2.4 1.7-2.4 1.5 0 1.5 1.4 1.5 2.5v4.4H18.8M6.7 8.5h2.8V19H6.7V8.5m1.4-1.2c-.9 0-1.6-.7-1.6-1.6 0-.9.7-1.6 1.6-1.6.9 0 1.6.7 1.6 1.6 0 .9-.7 1.6-1.6 1.6z" /></svg>
+                  <span>{linkedInToken ? 'Post Instantly to LinkedIn' : 'Connect & Share on LinkedIn'}</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button 
+              onClick={() => shareLegacy('twitter')}
+              className="w-full flex items-center justify-center space-x-2 bg-black text-white py-3 rounded-xl font-black text-xs hover:bg-slate-900 transition-all shadow-md active:scale-95"
+            >
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+              <span>Share on Twitter (X)</span>
+            </button>
+          )}
         </div>
 
         {activeTab === 'linkedin' ? (
@@ -186,17 +229,17 @@ export const PostResult: React.FC<PostResultProps> = ({ result, onArchive, onReg
             <div>
               <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Sentiment</span>
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                meta.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
-                meta.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
+                result.meta.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
+                result.meta.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
                 'bg-slate-100 text-slate-700'
-              }`}>{meta.sentiment}</span>
+              }`}>{result.meta.sentiment}</span>
             </div>
             <div>
               <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Virality</span>
-              <span className="text-[10px] font-bold text-slate-700">{meta.viralityScore}/10</span>
+              <span className="text-[10px] font-bold text-slate-700">{result.meta.viralityScore}/10</span>
             </div>
           </div>
-          <span className="text-[9px] uppercase font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">{meta.sourceTopic}</span>
+          <span className="text-[9px] uppercase font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">{result.meta.sourceTopic}</span>
         </div>
       </div>
     </div>

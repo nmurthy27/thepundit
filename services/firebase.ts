@@ -1,3 +1,4 @@
+
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
@@ -13,18 +14,25 @@ import {
   getDoc
 } from "firebase/firestore";
 
+// Updated Firebase configuration with the provided credentials
 const firebaseConfig = {
-  apiKey: "AIzaSyCJ69gBvJvXtKyn7dF_KT2Kwmxmzkjk_N4",
-  authDomain: "thepundit-8aaee.firebaseapp.com",
-  projectId: "thepundit-8aaee",
-  storageBucket: "thepundit-8aaee.firebasestorage.app",
-  messagingSenderId: "1062359807734",
-  appId: "1:1062359807734:web:fd3cc4cf3a2713af079ed7",
-  measurementId: "G-0QBL6PKCYJ"
+  apiKey: "AIzaSyD_OUxo7t_RnhtjgwFkWJQ-r3GncQfnIIU",
+  authDomain: "thepundit-9b1e6.firebaseapp.com",
+  projectId: "thepundit-9b1e6",
+  storageBucket: "thepundit-9b1e6.firebasestorage.app",
+  messagingSenderId: "835798649718",
+  appId: "1:835798649718:web:de74a35efc072d27464857",
+  measurementId: "G-4ST4CRCFN5"
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+} catch (e) {
+  console.error("Firebase Initialization Error:", e);
+}
+
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
@@ -50,14 +58,16 @@ export const registerWithEmail = async (name: string, email: string, pass: strin
     return result.user;
   } catch (error: any) {
     console.error("ThePundit: Registration Error:", error.code, error.message);
-    if (error.code === 'auth/email-already-in-use') {
+    if (error.code === 'auth/api-key-not-valid') {
+      throw new Error("The Firebase API Key is invalid. Please check Project Settings > General in your Firebase Console.");
+    } else if (error.code === 'auth/email-already-in-use') {
       throw new Error("This email is already registered.");
     } else if (error.code === 'auth/weak-password') {
       throw new Error("Password is too weak. Use at least 6 characters.");
     } else if (error.code === 'auth/invalid-email') {
       throw new Error("Invalid email format.");
     } else if (error.code === 'auth/unauthorized-domain') {
-      throw new Error(`This domain (${window.location.hostname}) is not authorized in Firebase Console.`);
+      throw new Error(`This domain (${window.location.hostname}) is not authorized. Add it to Authentication > Settings > Authorized Domains.`);
     }
     throw new Error(error.message);
   }
@@ -72,7 +82,9 @@ export const loginWithEmail = async (email: string, pass: string) => {
     return result.user;
   } catch (error: any) {
     console.error("ThePundit: Login Error:", error.code, error.message);
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+    if (error.code === 'auth/api-key-not-valid') {
+      throw new Error("Invalid Firebase API Key. Verify it in Project Settings > General.");
+    } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
       throw new Error("Invalid email or password.");
     } else if (error.code === 'auth/too-many-requests') {
       throw new Error("Too many failed attempts. Try again later.");
@@ -92,18 +104,20 @@ export const logout = () => signOut(auth);
  * Persist user-specific configuration and archives to Firestore
  */
 export const saveUserSettings = async (uid: string, data: any) => {
-  if (!uid) return;
+  if (!uid || !data) return;
   try {
     const userRef = doc(db, "users", uid);
     
-    // Explicitly stringify and parse to strip any non-serializable properties/circular references
-    const sanitizedData = JSON.parse(JSON.stringify(data));
+    // Robust Sanitization: Stringify and Parse to strip any non-serializable properties/circular references
+    const sanitizedData = JSON.parse(JSON.stringify(data, (key, value) => {
+      if (value && typeof value === 'object' && 'nodeType' in value) return undefined;
+      return value;
+    }));
     
     await setDoc(userRef, {
       ...sanitizedData,
       lastUpdated: new Date().toISOString()
     }, { merge: true });
-    console.debug("ThePundit: Firestore settings sync successful");
   } catch (error) {
     console.error("ThePundit: Firestore sync error:", error);
   }

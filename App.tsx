@@ -8,6 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { Onboarding } from './components/Onboarding';
 import { auth, loginWithEmail, registerWithEmail, logout, saveUserSettings, getUserSettings } from './services/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { exchangeCodeForToken, fetchLinkedInProfile } from './services/linkedinService';
 
 const INITIAL_SOURCES: FeedSource[] = [
   { id: 'ooh-1', name: 'Billboard Insider', url: 'https://billboardinsider.com', active: true },
@@ -45,6 +46,10 @@ const App: React.FC = () => {
   const [archivedArticles, setArchivedArticles] = useState<NewsArticle[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  
+  // LinkedIn Native Connection State
+  const [linkedInToken, setLinkedInToken] = useState<string | null>(null);
+  const [linkedInUrn, setLinkedInUrn] = useState<string | null>(null);
 
   // Auth State Listener & Initial Settings Sync
   useEffect(() => {
@@ -67,6 +72,8 @@ const App: React.FC = () => {
           if (settings.keywords) setKeywords(settings.keywords);
           if (settings.companies) setCompanies(settings.companies);
           if (settings.archive) setArchivedArticles(settings.archive);
+          if (settings.linkedInToken) setLinkedInToken(settings.linkedInToken);
+          if (settings.linkedInUrn) setLinkedInUrn(settings.linkedInUrn);
           setView(AppView.INBOX);
         } else {
           setView(AppView.ONBOARDING);
@@ -80,22 +87,48 @@ const App: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  // Handle LinkedIn OAuth Redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code && user) {
+      const connectLinkedIn = async () => {
+        try {
+          const { access_token } = await exchangeCodeForToken(code);
+          const profile = await fetchLinkedInProfile(access_token);
+          setLinkedInToken(access_token);
+          setLinkedInUrn(profile.id);
+          // Remove code from URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          // Save to Firestore
+          saveUserSettings(user.uid, { linkedInToken: access_token, linkedInUrn: profile.id });
+        } catch (err) {
+          console.error('LinkedIn connection failed:', err);
+        }
+      };
+      connectLinkedIn();
+    }
+  }, [user]);
+
   // Periodic Auto-Save to Firestore
   useEffect(() => {
     if (user && view !== AppView.LOGIN && view !== AppView.ONBOARDING) {
       const timer = setTimeout(() => {
+        // Only save serializable app state
         saveUserSettings(user.uid, {
           sources,
           keywords,
           companies,
           archive: archivedArticles,
+          linkedInToken,
+          linkedInUrn,
           name: user.name,
           email: user.email
         });
-      }, 3000); // Debounce saves
+      }, 3000); 
       return () => clearTimeout(timer);
     }
-  }, [sources, keywords, companies, archivedArticles, user, view]);
+  }, [sources, keywords, companies, archivedArticles, linkedInToken, linkedInUrn, user, view]);
 
   const handleLogin = async (email: string, pass: string) => {
     setLoginError(null);
@@ -118,6 +151,8 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await logout();
     setUser(null);
+    setLinkedInToken(null);
+    setLinkedInUrn(null);
     setView(AppView.LOGIN);
     setLoginError(null);
   };
@@ -403,7 +438,7 @@ const App: React.FC = () => {
                     </div>
                     {selectedArticleId === article.id && (
                       <div className="mt-10 pt-10 border-t-2 border-slate-50" onClick={e => e.stopPropagation()}>
-                        {article.result && <PostResult result={article.result} onArchive={() => archiveArticle(article.id)} onRegenerate={(tone) => generatePost(article, tone)} isRegenerating={article.processingStatus === 'PROCESSING'} articleUrl={article.link} />}
+                        {article.result && <PostResult result={article.result} onArchive={() => archiveArticle(article.id)} onRegenerate={(tone) => generatePost(article, tone)} isRegenerating={article.processingStatus === 'PROCESSING'} articleUrl={article.link} linkedInToken={linkedInToken} linkedInUrn={linkedInUrn} />}
                         {article.processingStatus === 'PROCESSING' && <div className="py-16 text-center"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="font-black text-slate-800">ThePundit is refining your perspective...</p></div>}
                         {article.processingStatus === 'IDLE' && <div className="py-10 text-center text-slate-400 font-bold">Click "Draft Insights" to start the engine.</div>}
                         {article.processingStatus === 'ERROR' && <div className="py-10 text-center text-red-500 font-bold">Something went wrong. Please try again.</div>}
