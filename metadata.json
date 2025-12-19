@@ -1,0 +1,5 @@
+{
+  "name": "ThePundit",
+  "description": "An automated personal branding agent that processes industry news into high-impact, opinionated LinkedIn and Twitter posts using Gemini AI.",
+  "requestFramePermissions": []
+}
