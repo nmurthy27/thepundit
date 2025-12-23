@@ -47,6 +47,7 @@ export interface NewsArticle {
   title: string;
   summary: string;
   link: string;
+  displayUrl?: string;
   sourceName: string;
   publishedDate: string;
   matchedKeywords: string[];
@@ -69,7 +70,8 @@ export enum AppView {
   SOURCES = 'SOURCES',
   KEYWORDS = 'KEYWORDS',
   COMPANIES = 'COMPANIES',
-  POSTS = 'POSTS'
+  POSTS = 'POSTS',
+  INSTANT_REVIEW = 'INSTANT_REVIEW'
 }
 
 export enum ProcessingPhase {

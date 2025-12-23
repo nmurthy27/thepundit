@@ -106,8 +106,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ userName, onComplete, on
         {step === 1 && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto">
             <div className="text-center">
-              <h2 className="text-4xl font-black text-white mb-4 tracking-tighter">Welcome to ThePundit, {userName}</h2>
-              <p className="text-slate-400 font-medium">What industry or profession should we monitor for your personal brand?</p>
+              <h2 className="text-4xl font-black text-white mb-4 tracking-tighter uppercase leading-none">thesocial<br/><span className="text-blue-500">pundit</span></h2>
+              <p className="text-slate-400 font-medium">What industry or profession should we monitor for your personal brand, {userName}?</p>
             </div>
             
             <div className="space-y-4">
@@ -145,7 +145,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ userName, onComplete, on
           <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500 flex flex-col h-full overflow-hidden">
             <div className="text-center shrink-0">
               <h2 className="text-3xl font-black text-white mb-2 tracking-tighter leading-none">Market Configuration</h2>
-              <p className="text-slate-400 font-medium text-sm">Review the 40+ publications and companies ThePundit will track.</p>
+              <p className="text-slate-400 font-medium text-sm">Review the publications and companies thesocialpundit will track.</p>
             </div>
 
             <div className="space-y-8 flex-1 overflow-y-auto pr-2 custom-scrollbar">
